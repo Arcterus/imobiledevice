@@ -38,24 +38,33 @@ module IMobileDevice
       # Starts the named service on the iDevice
       # Returns port it's started on 
       ptr = FFI::MemoryPointer.new :pointer
-      C.lockdownd_client_new_with_handshake(@device, ptr ,"foo")
+      C.lockdownd_client_new_with_handshake(@device, ptr, "foo")
       client_ptr = ptr.read_pointer
       
-      port = FFI::MemoryPointer.new :uint16
-      error = C.lockdownd_start_service(client_ptr, service_name, port)
+      descriptor = LockdowndDescriptor.new
+      
+      error = C.lockdownd_start_service(client_ptr, service_name, descriptor.pointer)
       if error.nonzero?
         raise LockdowndError, "Lockdownd raised error: #{C::LOCKDOWN_ERRORS[error]}"
       end
       C.lockdownd_client_free(client_ptr)
       
-      port.read_uint16
-      
+      descriptor[:port].read_uint16
     end
 
     def start_afc
       #Starts the AFC service used for accessing the iDevice's filesystem
       port = self.start_service 'com.apple.afc'
 
+      ptr = FFI::MemoryPointer.new :pointer
+      C.afc_client_new(@device, port, ptr)
+      @afc_client = ptr.read_pointer
+    end
+    
+    def start_afc2
+      # root filesystem access
+      port = self.start_service 'com.apple.afc2'
+      
       ptr = FFI::MemoryPointer.new :pointer
       C.afc_client_new(@device, port, ptr)
       @afc_client = ptr.read_pointer
@@ -122,5 +131,10 @@ module IMobileDevice
       C.afc_get_file_info(@afc_client, path, ptr)
       ptr.read_pointer.read_unbound_array_of_string
     end
+  end
+  
+  class LockdowndDescriptor < FFI::Struct
+    layout :port, :uint16,
+           :ssl, :uint8
   end
 end
